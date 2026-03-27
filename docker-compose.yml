@@ -1,0 +1,73 @@
+services:
+  narrowlitics-db:
+    image: pgvector/pgvector:pg16
+    container_name: narrowlitics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-narrowlitics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+      POSTGRES_DB: ${POSTGRES_DB:-narrowlitics}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./docker-volumes/pgdata:/var/lib/postgresql/data
+      - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-narrowlitics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  narrowlitics-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: narrowlitics-backend
+    restart: unless-stopped
+    depends_on:
+      narrowlitics-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-narrowlitics}:${POSTGRES_PASSWORD:-changeme_in_production}@narrowlitics-db:5432/${POSTGRES_DB:-narrowlitics}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./backend:/app
+      - ./docker-volumes/media:/app/media
+
+  narrowlitics-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: narrowlitics-worker
+    restart: unless-stopped
+    depends_on:
+      narrowlitics-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-narrowlitics}:${POSTGRES_PASSWORD:-changeme_in_production}@narrowlitics-db:5432/${POSTGRES_DB:-narrowlitics}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    command: python -m celery -A app.worker worker --loglevel=info
+    volumes:
+      - ./backend:/app
+      - ./docker-volumes/media:/app/media
+
+  narrowlitics-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: narrowlitics-frontend
+    restart: unless-stopped
+    depends_on:
+      - narrowlitics-backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${BACKEND_URL:-http://localhost:8005}
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next

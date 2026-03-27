@@ -1,0 +1,94 @@
+from pydantic import BaseModel
+from datetime import datetime
+
+
+# --- Shows ---
+class ShowOut(BaseModel):
+    id: int
+    name: str
+    theme_config: dict
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# --- Episodes ---
+class EpisodeOut(BaseModel):
+    id: int
+    show_id: int
+    title: str
+    season: int
+    episode_number: int
+    duration_seconds: float | None
+    status: str
+    gemini_cost_usd: float
+    indexed_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EpisodeStatusUpdate(BaseModel):
+    status: str
+
+
+# --- Scenes ---
+class SceneOut(BaseModel):
+    id: int
+    episode_id: int
+    start_timestamp: float
+    end_timestamp: float
+    duration: float
+    characters_present: list
+    key_dialog: list
+    actions: str | None
+    interactions: str | None
+    mood_ambience: str | None
+    color_palette: list
+    tropes_memes: list
+    explicitness: str
+    background: str | None
+    scene_transitions: str | None
+    motivations_feelings: str | None
+    overall_confidence: float
+    thumbnail_path: str | None
+    description_text: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SceneBulkCreate(BaseModel):
+    """For ingesting Gemini output directly."""
+    scenes: list[dict]
+
+
+# --- Search ---
+class SearchRequest(BaseModel):
+    query: str
+    min_confidence: float = 0.0
+    characters: list[str] | None = None
+    limit: int = 20
+
+
+class SearchResult(BaseModel):
+    scene: SceneOut
+    similarity: float
+
+
+# --- Tweaks ---
+class TweakCreate(BaseModel):
+    scene_a_id: int
+    scene_b_id: int
+    transition_prompt: str
+
+
+class TweakOut(BaseModel):
+    id: int
+    scene_a_id: int
+    scene_b_id: int
+    transition_prompt: str
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

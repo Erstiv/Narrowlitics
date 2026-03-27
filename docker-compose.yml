@@ -66,7 +66,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${BACKEND_URL:-http://localhost:8005}
     ports:
-      - "3002:3000"
+      - "3010:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

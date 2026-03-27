@@ -2,15 +2,16 @@
 """
 Narrowlitics: Push Scenes to Server (Run on M5 Mac)
 
-After Gemini indexing, push the scene JSON to the Narrowlitics API on Hetzner.
+After Gemini indexing + embedding generation, push the final scene JSON
+(with embeddings) to the Narrowlitics API on Hetzner.
 
 Usage:
-    python push_scenes.py scenes_gemini.json --episode-id 1
+    python push_scenes.py processing/output/scenes_final.json --episode-id 1
 
 What it does:
-    1. Reads the Gemini-generated scene JSON file
+    1. Reads the scene JSON file (from generate_embeddings.py)
     2. Sends it to the Narrowlitics API on your Hetzner server
-    3. The API stores it in PostgreSQL with vector embeddings
+    3. The API stores scenes + 768-dim vector embeddings in PostgreSQL
 """
 import json
 import sys
@@ -22,9 +23,14 @@ def push_scenes(json_path: str, episode_id: int, api_url: str) -> None:
     with open(json_path) as f:
         scenes = json.load(f)
 
-    print(f"Pushing {len(scenes)} scenes to {api_url}/api/scenes/episode/{episode_id}/bulk")
+    embedded = sum(1 for s in scenes if s.get("description_embedding"))
+    print(f"Pushing {len(scenes)} scenes ({embedded} with embeddings) to server...")
+    print(f"  Endpoint: {api_url}/api/scenes/episode/{episode_id}/bulk")
 
     payload = json.dumps({"scenes": scenes}).encode("utf-8")
+    payload_mb = len(payload) / (1024 * 1024)
+    print(f"  Payload size: {payload_mb:.1f} MB")
+
     req = urllib.request.Request(
         f"{api_url}/api/scenes/episode/{episode_id}/bulk",
         data=payload,
@@ -33,9 +39,11 @@ def push_scenes(json_path: str, episode_id: int, api_url: str) -> None:
     )
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             result = json.loads(resp.read())
             print(f"Success! Created {result.get('created', '?')} scenes.")
+            if result.get("replaced_existing"):
+                print("  (Replaced any existing scenes for this episode)")
     except urllib.error.HTTPError as e:
         print(f"API error {e.code}: {e.read().decode()}")
         sys.exit(1)
@@ -47,9 +55,9 @@ def push_scenes(json_path: str, episode_id: int, api_url: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Push Gemini scene data to Narrowlitics API")
-    parser.add_argument("json_path", help="Path to Gemini scene JSON file")
+    parser.add_argument("json_path", help="Path to scenes_final.json (with embeddings)")
     parser.add_argument("--episode-id", type=int, default=1, help="Episode ID in the database")
-    parser.add_argument("--api-url", default="https://narrowlitics.capainofindustries.com",
+    parser.add_argument("--api-url", default="https://captainofindustries.com",
                         help="Narrowlitics API URL")
     args = parser.parse_args()
 

@@ -30,9 +30,19 @@ async def get_scene(scene_id: int, db: AsyncSession = Depends(get_db)):
 async def bulk_create_scenes(
     episode_id: int, body: SceneBulkCreate, db: AsyncSession = Depends(get_db)
 ):
-    """Ingest Gemini-generated scene data for an episode."""
+    """Ingest Gemini-generated scene data (with optional embeddings) for an episode."""
+    # Clear existing scenes for this episode (re-indexing)
+    existing = await db.execute(
+        select(Scene).where(Scene.episode_id == episode_id)
+    )
+    for old_scene in existing.scalars().all():
+        await db.delete(old_scene)
+
     created = 0
     for scene_data in body.scenes:
+        # Extract embedding if present (768-dim float list from generate_embeddings.py)
+        embedding = scene_data.get("description_embedding")
+
         scene = Scene(
             episode_id=episode_id,
             start_timestamp=scene_data["start_timestamp"],
@@ -51,10 +61,11 @@ async def bulk_create_scenes(
             motivations_feelings=scene_data.get("motivations_feelings"),
             overall_confidence=scene_data.get("overall_scene_confidence", 0),
             description_text=scene_data.get("description_text"),
+            description_embedding=embedding,
             raw_gemini_json=scene_data,
         )
         db.add(scene)
         created += 1
 
     await db.commit()
-    return {"created": created}
+    return {"created": created, "replaced_existing": True}

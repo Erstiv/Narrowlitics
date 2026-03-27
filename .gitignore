@@ -31,3 +31,7 @@ Thumbs.db
 processing/output/
 *.mp4
 *.mkv
+*.ogm
+
+# Input media files
+input/
